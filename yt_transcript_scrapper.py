@@ -27,6 +27,12 @@ def parse_arguments():
         default='en',
         help="Langue de la transcription (par défaut: 'hi')."
     )
+    parser.add_argument(
+        '--max_videos',
+        type=int,
+        default=None,
+        help="Nombre maximum de vidéos à traiter. Si non spécifié, toutes les vidéos seront traitées."
+    )
     args = parser.parse_args()
 
     # Demander channel_id si non fourni
@@ -47,7 +53,7 @@ def ensure_folder_exists(folder_path):
 def fetch_videos(channel_id):
     print(f"Récupération des vidéos pour la chaîne ID: {channel_id}")
     try:
-        return scrapetube.get_channel(channel_id)
+        return list(scrapetube.get_channel(channel_id))
     except Exception as e:
         print(f"Erreur lors de la récupération des vidéos: {e}")
         exit(1)
@@ -58,19 +64,22 @@ def save_transcript(folder_path, file_name, transcript_text):
         txt_file.write(transcript_text + "\n")
     print(f"Transcription sauvegardée dans {file_path}")
 
-def process_videos(videos, language, folder_path, file_name):
+def process_videos(videos, language, folder_path, file_name, max_videos):
     formatter = TextFormatter()
-    total = len(videos)
+    total_videos = len(videos) if max_videos is None else min(len(videos), max_videos)
     success_count = 0
     fail_count = 0
 
     for idx, video in enumerate(videos, start=1):
+        if max_videos is not None and idx > max_videos:
+            break
+
         video_id = video.get('videoId')
         if not video_id:
-            print(f"[{idx}/{total}] ID vidéo non trouvé, passage à la suivante.")
+            print(f"[{idx}/{total_videos}] ID vidéo non trouvé, passage à la suivante.")
             fail_count += 1
             continue
-        print(f"[{idx}/{total}] Traitement de la vidéo ID: {video_id}")
+        print(f"[{idx}/{total_videos}] Traitement de la vidéo ID: {video_id}")
         try:
             transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=[language])
             txt_formatted = formatter.format_transcript(transcript)
@@ -87,7 +96,10 @@ def main():
     args = parse_arguments()
     ensure_folder_exists(args.folder_path)
     videos = fetch_videos(args.channel_id)
-    process_videos(videos, args.language, args.folder_path, args.file_name)
+    if not videos:
+        print("Aucune vidéo trouvée sur cette chaîne.")
+        exit(0)
+    process_videos(videos, args.language, args.folder_path, args.file_name, args.max_videos)
 
 if __name__ == "__main__":
     main()
